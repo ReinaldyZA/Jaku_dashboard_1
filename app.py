@@ -763,6 +763,37 @@ def kategori_dari_ispu(ispu):
     return "Berbahaya"
 
 
+def hitung_ispu(pm10, pm25, so2, co, o3, no2):
+    """
+    Hitung nilai ISPU numerik + kategori (5 kelas) dari konsentrasi polutan.
+    Formula pendekatan sub-indeks: tiap polutan dinormalisasi ke skala ISPU,
+    nilai akhir = MAX dari semua sub-indeks (polutan paling dominan menentukan).
+
+    Mengembalikan (nilai_ispu, kategori).
+    """
+    ispu_pm10 = (pm10 / 200) * 300
+    ispu_pm25 = (pm25 / 200) * 300
+    ispu_so2  = (so2 / 120) * 300
+    ispu_co   = (co / 80) * 300
+    ispu_o3   = (o3 / 120) * 300
+    ispu_no2  = (no2 / 120) * 300
+
+    ispu_final = max(ispu_pm10, ispu_pm25, ispu_so2, ispu_co, ispu_o3, ispu_no2)
+
+    if ispu_final <= 50:
+        kategori = "Baik"
+    elif ispu_final <= 100:
+        kategori = "Sedang"
+    elif ispu_final <= 200:
+        kategori = "Tidak Sehat"
+    elif ispu_final <= 300:
+        kategori = "Sangat Tidak Sehat"
+    else:
+        kategori = "Berbahaya"
+
+    return round(ispu_final, 2), kategori
+
+
 # =================================================================
 # SVG INLINE HELPERS (FIX #4, #5, #6)
 # -----------------------------------------------------------------
@@ -1780,14 +1811,17 @@ def page_simulasi(data):
     if "sim_hasil" not in st.session_state:
         st.session_state["sim_hasil"] = None
 
-    # Preset handler
+    # Preset handler — 5 preset, masing-masing menghasilkan 1 kategori ISPU
     def apply_preset(name):
-        if name == "Udara Bersih":
-            st.session_state["sim_values"] = {"pm25": 8.0, "pm10": 25.0, "no2": 15.0, "so2": 10.0, "co": 0.3, "o3": 30.0}
-        elif name == "Udara Sedang":
-            st.session_state["sim_values"] = {"pm25": 30.0, "pm10": 70.0, "no2": 25.0, "so2": 35.0, "co": 1.5, "o3": 60.0}
-        elif name == "Udara Kurang Baik":
-            st.session_state["sim_values"] = {"pm25": 80.0, "pm10": 180.0, "no2": 180.0, "so2": 220.0, "co": 10.0, "o3": 250.0}
+        presets = {
+            "Udara Bersih":             {"pm25": 20.0, "pm10": 15.0, "no2": 10.0, "so2": 10.0, "co": 3.0,  "o3": 10.0},
+            "Udara Sedang":             {"pm25": 50.0, "pm10": 40.0, "no2": 28.0, "so2": 30.0, "co": 12.0, "o3": 28.0},
+            "Udara Tidak Sehat":        {"pm25": 100.0,"pm10": 90.0, "no2": 60.0, "so2": 55.0, "co": 30.0, "o3": 55.0},
+            "Udara Sangat Tidak Sehat": {"pm25": 167.0,"pm10": 150.0,"no2": 95.0, "so2": 95.0, "co": 55.0, "o3": 90.0},
+            "Udara Berbahaya":          {"pm25": 200.0,"pm10": 200.0,"no2": 140.0,"so2": 130.0,"co": 75.0, "o3": 130.0},
+        }
+        if name in presets:
+            st.session_state["sim_values"] = presets[name].copy()
         st.session_state["sim_hasil"] = None
 
     # Layout: kiri = form polutan, kanan = hasil
@@ -1811,18 +1845,29 @@ def page_simulasi(data):
             if st.button("ⓘ Info", key="btn_info_simulasi", use_container_width=True):
                 render_popup_polutan()
 
-        # Preset buttons
-        st.markdown("<div style='margin-bottom:0.5rem; font-size:0.85rem; color:#475569; font-weight:600;'>Preset</div>", unsafe_allow_html=True)
-        pc = st.columns(3, gap="small")
+        # Preset buttons — 5 preset (satu per kategori ISPU)
+        st.markdown("<div style='margin-bottom:0.5rem; font-size:0.85rem; color:#475569; font-weight:600;'>Preset Skenario</div>", unsafe_allow_html=True)
+        pc = st.columns(5, gap="small")
         with pc[0]:
-            if st.button("Udara Bersih", key="preset_bersih", use_container_width=True):
+            if st.button("Bersih", key="preset_bersih", use_container_width=True,
+                         help="Kualitas udara Baik (ISPU 0–50)"):
                 apply_preset("Udara Bersih"); st.rerun()
         with pc[1]:
-            if st.button("Udara Sedang", key="preset_sedang", use_container_width=True):
+            if st.button("Sedang", key="preset_sedang", use_container_width=True,
+                         help="Kualitas udara Sedang (ISPU 51–100)"):
                 apply_preset("Udara Sedang"); st.rerun()
         with pc[2]:
-            if st.button("Udara Kurang Baik", key="preset_buruk", use_container_width=True):
-                apply_preset("Udara Kurang Baik"); st.rerun()
+            if st.button("Tidak Sehat", key="preset_tdksehat", use_container_width=True,
+                         help="Kualitas udara Tidak Sehat (ISPU 101–200)"):
+                apply_preset("Udara Tidak Sehat"); st.rerun()
+        with pc[3]:
+            if st.button("Sangat", key="preset_sgttdk", use_container_width=True,
+                         help="Kualitas udara Sangat Tidak Sehat (ISPU 201–300)"):
+                apply_preset("Udara Sangat Tidak Sehat"); st.rerun()
+        with pc[4]:
+            if st.button("Berbahaya", key="preset_bahaya", use_container_width=True,
+                         help="Kualitas udara Berbahaya (ISPU ≥ 301)"):
+                apply_preset("Udara Berbahaya"); st.rerun()
 
         # Pilih model klasifikasi (sama seperti notebook: XGBoost / RF / SVM)
         st.markdown(
@@ -1859,7 +1904,7 @@ def page_simulasi(data):
                 f"{INFO_POLUTAN['PM2.5']['deskripsi_pendek']}</div>",
                 unsafe_allow_html=True,
             )
-            vals["pm25"] = st.slider("PM2.5", 0.0, 200.0, vals["pm25"], 0.5,
+            vals["pm25"] = st.slider("PM2.5", 0.0, 300.0, vals["pm25"], 0.5,
                                      key="sl_pm25", label_visibility="collapsed")
             st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#64748B;'>{vals['pm25']:.2f} (µg/m³)</div>",
                         unsafe_allow_html=True)
@@ -1885,7 +1930,7 @@ def page_simulasi(data):
                 f"{INFO_POLUTAN['CO']['deskripsi_pendek']}</div>",
                 unsafe_allow_html=True,
             )
-            vals["co"] = st.slider("CO", 0.0, 50.0, vals["co"], 0.1,
+            vals["co"] = st.slider("CO", 0.0, 100.0, vals["co"], 0.1,
                                    key="sl_co", label_visibility="collapsed")
             st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:#64748B;'>{vals['co']:.2f} (mg/m³)</div>",
                         unsafe_allow_html=True)
@@ -1935,11 +1980,24 @@ def page_simulasi(data):
         bc1, bc2, bc3 = st.columns([1, 1, 2])
         with bc1:
             if st.button("Submit Simulasi", key="btn_submit", type="primary", use_container_width=True):
-                st.session_state["sim_hasil"] = prediksi_ispu_xgboost(
+                # Nilai ISPU + kategori (5 kelas) dari formula hitung_ispu()
+                nilai_ispu, kategori = hitung_ispu(
+                    pm10=vals["pm10"], pm25=vals["pm25"], so2=vals["so2"],
+                    co=vals["co"], o3=vals["o3"], no2=vals["no2"],
+                )
+                # Klasifikasi model ML (XGBoost/RF/SVM) sebagai pembanding
+                ml = prediksi_ispu_xgboost(
                     pm10=vals["pm10"], pm25=vals["pm25"], so2=vals["so2"],
                     co=vals["co"], o3=vals["o3"], no2=vals["no2"],
                     model_choice=st.session_state.get("sim_model_choice", "xgboost"),
                 )
+                st.session_state["sim_hasil"] = {
+                    "nilai_ispu": nilai_ispu,
+                    "kategori": kategori,
+                    "ml_kategori": ml["kategori"],
+                    "ml_model": ml.get("model_used", "XGBoost"),
+                    "ml_confidence": ml.get("confidence"),
+                }
                 st.rerun()
         with bc2:
             if st.button("Reset", key="btn_reset", type="secondary", use_container_width=True):
@@ -1978,7 +2036,7 @@ def page_simulasi(data):
                 f"""
                 <div class='hasil-hero'>
                     <div>
-                        <div class='hasil-num' style='color:{info["warna"]};'>{hasil["nilai_ispu"]}</div>
+                        <div class='hasil-num' style='color:{info["warna"]};'>{hasil["nilai_ispu"]:.0f}</div>
                         <div class='hasil-label-ispu'>ISPU</div>
                     </div>
                     <div>
@@ -1996,37 +2054,23 @@ def page_simulasi(data):
                 unsafe_allow_html=True,
             )
 
-            # Info model yang dipakai (dinamis sesuai pilihan dropdown)
-            model_used = hasil.get("model_used", "XGBoost")
-            if hasil.get("confidence") is not None:
-                st.markdown(
-                    f"""
-                    <div class='info-box' style='margin-top:1rem;'>
-                        <div class='info-box-icon'>ⓘ</div>
-                        <div class='info-box-text'>
-                            Prediksi dibuat dengan model <strong>{model_used}</strong> 
-                            (tingkat keyakinan: <strong>{hasil["confidence"]*100:.1f}%</strong>).
-                        </div>
+            # Pembanding klasifikasi Model ML (XGBoost/RF/SVM)
+            ml_model = hasil.get("ml_model", "XGBoost")
+            ml_kat = hasil.get("ml_kategori")
+            ml_conf = hasil.get("ml_confidence")
+            conf_txt = f" (keyakinan {ml_conf*100:.1f}%)" if ml_conf is not None else ""
+            st.markdown(
+                f"""
+                <div class='info-box' style='margin-top:1rem;'>
+                    <div class='info-box-icon'>ⓘ</div>
+                    <div class='info-box-text'>
+                        Nilai ISPU dihitung dengan formula sub-indeks polutan (standar 5 kategori).<br>
+                        Klasifikasi model <strong>{ml_model}</strong>: <strong>{ml_kat}</strong>{conf_txt}.
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            elif not hasil.get("fallback"):
-                # SVM: SVC default tanpa probability=True → tidak ada confidence
-                st.markdown(
-                    f"""
-                    <div class='info-box' style='margin-top:1rem;'>
-                        <div class='info-box-icon'>ⓘ</div>
-                        <div class='info-box-text'>
-                            Prediksi dibuat dengan model <strong>{model_used}</strong>.
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            if hasil.get("fallback"):
-                st.warning("⚠ Model belum tersedia; hasil menggunakan formula bobot polutan sederhana.")
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         st.markdown("</div>", unsafe_allow_html=True)
 
